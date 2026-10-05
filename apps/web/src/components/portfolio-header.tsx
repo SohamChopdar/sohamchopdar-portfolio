@@ -1,0 +1,3 @@
+import { useState } from 'react';
+import { ArrowUpRight, Menu } from 'lucide-react';
+export function PortfolioHeader(){const [open,setOpen]=useState(false);return <header className="site-header"><a href="#top" className="brand"><span>SC</span><strong>Soham<br/><em>Chopdar</em></strong></a><nav className={`nav-links ${open?'open':''}`} aria-label="Main navigation">{['About','Skills','Projects','Experience','Contact'].map(n=><a key={n} href={`#${n.toLowerCase()}`} onClick={()=>setOpen(false)}>{n}</a>)}</nav><a href="#contact" className="header-cta">Let’s connect <ArrowUpRight size={15}/></a><button className="menu-button" aria-label="Toggle navigation" aria-expanded={open} onClick={()=>setOpen(!open)}><Menu/></button></header>}

@@ -1,0 +1,12 @@
+import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { join, relative } from 'node:path';
+import { deflateRawSync } from 'node:zlib';
+const root=process.cwd();
+const excluded=new Set(['node_modules','.git','vault','pb_data','.react-router','dist','.env','.h5g_env','project.zip','.DS_Store']);
+const entries:{name:string,data:Buffer}[]=[];
+async function scan(dir:string){for(const item of await readdir(dir,{withFileTypes:true})){if(excluded.has(item.name)||item.name.startsWith('.env')||item.name==='pocketbase'||item.name.endsWith('.log'))continue;const path=join(dir,item.name);if(item.isDirectory())await scan(path);else if(item.isFile())entries.push({name:relative(root,path).replaceAll('\\','/'),data:await readFile(path)});}}
+function crc32(data:Buffer){let crc=0xffffffff;for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
+await scan(root);
+const chunks:Buffer[]=[];const central:Buffer[]=[];let offset=0;
+for(const entry of entries){const name=Buffer.from(entry.name);const compressed=deflateRawSync(entry.data);const crc=crc32(entry.data);const header=Buffer.alloc(30);header.writeUInt32LE(0x04034b50,0);header.writeUInt16LE(20,4);header.writeUInt16LE(0x800,6);header.writeUInt16LE(8,8);header.writeUInt16LE(33,12);header.writeUInt32LE(crc,14);header.writeUInt32LE(compressed.length,18);header.writeUInt32LE(entry.data.length,22);header.writeUInt16LE(name.length,26);chunks.push(header,name,compressed);const c=Buffer.alloc(46);c.writeUInt32LE(0x02014b50,0);c.writeUInt16LE(20,4);c.writeUInt16LE(20,6);c.writeUInt16LE(0x800,8);c.writeUInt16LE(8,10);c.writeUInt16LE(33,14);c.writeUInt32LE(crc,16);c.writeUInt32LE(compressed.length,20);c.writeUInt32LE(entry.data.length,24);c.writeUInt16LE(name.length,28);c.writeUInt32LE(offset,42);central.push(c,name);offset+=header.length+name.length+compressed.length;}
+const directory=Buffer.concat(central);const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(entries.length,8);end.writeUInt16LE(entries.length,10);end.writeUInt32LE(directory.length,12);end.writeUInt32LE(offset,16);await mkdir('apps/web/public',{recursive:true});await writeFile('apps/web/public/project.zip',Buffer.concat([...chunks,directory,end]));console.log(`Exported ${entries.length} files to apps/web/public/project.zip (no secrets, dependencies, or database records).`);
